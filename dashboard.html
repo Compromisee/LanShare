@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LAN Share</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+<style>
+/* ── Reset & Variables ──────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080c10;
+  --surface:#0d1117;
+  --surface2:#111820;
+  --surface3:#161d27;
+  --border:#1e2d3d;
+  --border2:#253347;
+  --accent:#00d4ff;
+  --accent2:#00ff88;
+  --accent3:#ff6b35;
+  --warn:#ffb800;
+  --error:#ff4444;
+  --text:#c9d8e8;
+  --text2:#7a9ab5;
+  --text3:#3d5a73;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Syne',sans-serif;
+  --radius:6px;
+  --glow:0 0 20px rgba(0,212,255,.15);
+  --glow2:0 0 20px rgba(0,255,136,.15);
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;overflow:hidden}
+
+/* ── Layout ─────────────────────────────────────────── */
+#app{display:grid;grid-template-rows:48px 1fr;grid-template-columns:280px 1fr 320px;height:100vh;gap:0}
+#topbar{grid-column:1/-1;grid-row:1;display:flex;align-items:center;gap:16px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border);z-index:10}
+#sidebar{grid-column:1;grid-row:2;display:flex;flex-direction:column;background:var(--surface);border-right:1px solid var(--border);overflow:hidden}
+#main{grid-column:2;grid-row:2;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+#panel{grid-column:3;grid-row:2;display:flex;flex-direction:column;background:var(--surface);border-left:1px solid var(--border);overflow:hidden}
+
+/* ── Topbar ─────────────────────────────────────────── */
+.logo{font-family:var(--sans);font-weight:800;font-size:18px;color:var(--accent);letter-spacing:-.5px;text-transform:uppercase}
+.logo span{color:var(--accent2)}
+.topbar-sep{flex:1}
+.badge{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--text2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);box-shadow:0 0 6px var(--accent2);animation:pulse 2s infinite}
+.dot.offline{background:var(--error);box-shadow:0 0 6px var(--error);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.stat-pill{display:flex;gap:4px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px}
+.stat-pill .lbl{color:var(--text3)}
+.stat-pill .val{color:var(--accent);font-weight:600}
+
+/* ── Section headers ────────────────────────────────── */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.section-title{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text2)}
+.count-badge{background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--text2)}
+
+/* ── Devices list ───────────────────────────────────── */
+#devices-list{overflow-y:auto;flex:1;padding:6px}
+.device-card{display:flex;align-items:center;gap:10px;padding:10px 10px;border-radius:var(--radius);cursor:pointer;border:1px solid transparent;transition:all .15s;margin-bottom:3px}
+.device-card:hover{background:var(--surface2);border-color:var(--border)}
+.device-card.active{background:var(--surface3);border-color:var(--accent);box-shadow:var(--glow)}
+.device-card.self-device{border-color:var(--accent2) !important;background:rgba(0,255,136,.04)}
+.device-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--surface3);border:1px solid var(--border)}
+.device-icon.online{border-color:var(--accent2)}
+.device-info{flex:1;min-width:0}
+.device-name{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.device-ip{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.device-status{font-size:9px;letter-spacing:1px;text-transform:uppercase}
+.device-status.online{color:var(--accent2)}
+.device-status.offline{color:var(--error)}
+.device-status.self{color:var(--accent)}
+.scan-bar{padding:10px 14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);display:flex;align-items:center;gap:8px}
+.scan-spin{width:8px;height:8px;border:1px solid var(--text3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── File Explorer ──────────────────────────────────── */
+#explorer{display:flex;flex-direction:column;height:100%}
+.path-bar{display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.path-crumb{font-size:11px;color:var(--text2);cursor:pointer;padding:2px 6px;border-radius:4px;transition:.1s}
+.path-crumb:hover{background:var(--surface2);color:var(--accent)}
+.path-sep{color:var(--text3);font-size:11px}
+.toolbar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:11px;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.06)}
+.btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
+.btn.primary:hover{opacity:.85}
+.btn.danger:hover{border-color:var(--error);color:var(--error)}
+.target-banner{padding:6px 14px;background:rgba(0,212,255,.06);border-bottom:1px solid var(--border);font-size:11px;color:var(--accent);display:flex;align-items:center;gap:8px}
+.target-banner.hidden{display:none}
+
+#file-grid{flex:1;overflow-y:auto;padding:6px}
+.file-row{display:grid;grid-template-columns:22px 1fr 90px 150px auto;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius);border:1px solid transparent;cursor:pointer;transition:.12s;margin-bottom:2px}
+.file-row:hover{background:var(--surface2);border-color:var(--border)}
+.file-row.selected{background:rgba(0,212,255,.07);border-color:var(--accent)}
+.file-icon{font-size:14px;text-align:center}
+.file-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-size{font-size:10px;color:var(--text3);text-align:right}
+.file-date{font-size:10px;color:var(--text3)}
+.file-actions{display:flex;gap:4px;opacity:0;transition:.12s}
+.file-row:hover .file-actions{opacity:1}
+.icon-btn{width:22px;height:22px;border-radius:4px;border:1px solid var(--border);background:var(--surface3);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;transition:.1s;color:var(--text2)}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.icon-btn.red:hover{border-color:var(--error);color:var(--error)}
+
+.file-hdr{display:grid;grid-template-columns:22px 1fr 90px 150px auto;align-items:center;gap:8px;padding:5px 10px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;position:sticky;top:0;background:var(--bg)}
+.file-hdr span{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3)}
+
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--text3)}
+.empty-icon{font-size:40px;opacity:.3}
+.empty-text{font-size:12px}
+
+/* ── Right panel ────────────────────────────────────── */
+#transfers-list{overflow-y:auto;flex:1;padding:6px}
+.transfer-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:6px;transition:.15s}
+.transfer-card.done{border-color:var(--accent2)}
+.transfer-card.error{border-color:var(--error)}
+.transfer-card.transferring{border-color:var(--accent)}
+.tx-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.tx-file{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.tx-dir{font-size:9px;padding:2px 6px;border-radius:10px;letter-spacing:1px;text-transform:uppercase}
+.tx-dir.send{background:rgba(0,212,255,.12);color:var(--accent)}
+.tx-dir.recv{background:rgba(0,255,136,.12);color:var(--accent2)}
+.tx-status{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}
+.progress-track{height:4px;background:var(--surface3);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.progress-fill{height:100%;border-radius:2px;transition:width .3s;background:var(--accent)}
+.progress-fill.done{background:var(--accent2)}
+.progress-fill.error{background:var(--error)}
+.tx-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--text3)}
+
+/* ── Log panel ──────────────────────────────────────── */
+#log-section{border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:180px}
+#log-list{overflow-y:auto;flex:1;padding:6px}
+.log-entry{font-size:10px;padding:3px 6px;border-radius:3px;margin-bottom:2px;color:var(--text2);line-height:1.5}
+.log-entry .ts{color:var(--text3);margin-right:6px}
+.log-entry.join{color:var(--accent2)}
+.log-entry.leave{color:var(--warn)}
+.log-entry.error{color:var(--error)}
+.log-entry.transfer{color:var(--accent)}
+
+/* ── Modal ──────────────────────────────────────────── */
+#modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+#modal-bg.open{display:flex}
+#modal{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:24px;min-width:360px;max-width:480px;width:90%}
+.modal-title{font-family:var(--sans);font-weight:700;font-size:16px;margin-bottom:16px;color:var(--accent)}
+.modal-row{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.modal-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px}
+.modal-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;width:100%;transition:.15s}
+.modal-input:focus{border-color:var(--accent)}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+/* ── Scrollbars ─────────────────────────────────────── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:var(--border2)}
+
+/* ── New device flash ───────────────────────────────── */
+@keyframes flashIn{from{background:rgba(0,255,136,.2)}to{background:transparent}}
+.flash{animation:flashIn 1.5s ease-out}
+
+/* ── Connection indicator ───────────────────────────── */
+#conn-status{font-size:10px;display:flex;align-items:center;gap:5px}
+#conn-dot{width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 6px var(--accent2)}
+#conn-dot.disconnected{background:var(--error);box-shadow:0 0 6px var(--error)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="logo">LAN<span>Share</span></div>
+  <div class="badge"><div class="dot" id="scan-dot"></div> <span id="scan-label">Scanning…</span></div>
+  <div class="stat-pill"><span class="lbl">↑</span><span class="val" id="stat-sent">0 B</span></div>
+  <div class="stat-pill"><span class="lbl">↓</span><span class="val" id="stat-recv">0 B</span></div>
+  <div class="topbar-sep"></div>
+  <div id="conn-status"><div id="conn-dot"></div><span id="conn-label">Connecting…</span></div>
+  <div class="badge"><span id="my-hostname">—</span> · <span id="my-ip">—</span></div>
+</div>
+
+<!-- SIDEBAR: Devices -->
+<div id="sidebar">
+  <div class="section-hdr">
+    <span class="section-title">Devices</span>
+    <span class="count-badge" id="device-count">0</span>
+  </div>
+  <div id="devices-list"></div>
+  <div class="scan-bar"><div class="scan-spin" id="scan-spin"></div><span id="scan-text">Scanning network…</span></div>
+</div>
+
+<!-- MAIN: Explorer -->
+<div id="main">
+  <div id="explorer">
+    <div class="target-banner hidden" id="target-banner">
+      <span>🔗</span> <span id="target-label">Browsing remote device</span>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="clearRemote()">✕ Back to Local</button>
+    </div>
+    <div class="path-bar" id="path-bar"></div>
+    <div class="toolbar">
+      <button class="btn" onclick="navUp()">↑ Up</button>
+      <button class="btn" onclick="refreshDir()">⟳ Refresh</button>
+      <button class="btn" onclick="openMkdir()">+ Folder</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" id="send-btn" onclick="openSendModal()" style="display:none">⇧ Send Selected</button>
+    </div>
+    <div class="file-hdr">
+      <span></span><span>Name</span><span style="text-align:right">Size</span><span>Modified</span><span></span>
+    </div>
+    <div id="file-grid">
+      <div class="empty-state"><div class="empty-icon">📂</div><div class="empty-text">Select a device to browse</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL: Transfers + Log -->
+<div id="panel">
+  <div class="section-hdr">
+    <span class="section-title">Transfers</span>
+    <span class="count-badge" id="tx-count">0</span>
+  </div>
+  <div id="transfers-list"></div>
+  <div id="log-section">
+    <div class="section-hdr" style="border-top:1px solid var(--border)">
+      <span class="section-title">Activity Log</span>
+      <button class="btn" style="font-size:9px;padding:2px 8px" onclick="clearLog()">Clear</button>
+    </div>
+    <div id="log-list"></div>
+  </div>
+</div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-bg">
+  <div id="modal">
+    <div class="modal-title" id="modal-title">Send File</div>
+    <div id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" id="modal-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────
+const S = {
+  devices: {},
+  transfers: {},
+  currentPath: null,
+  currentDevice: null,   // null = local
+  selectedFiles: new Set(),
+  stats: {sent_bytes:0, recv_bytes:0, files_sent:0, files_recv:0},
+};
+
+// ── SSE Connection ─────────────────────────────────────
+let sse = null;
+let reconnectTimer = null;
+
+function connectSSE() {
+  if (sse) { sse.close(); sse = null; }
+  sse = new EventSource('/api/events');
+
+  sse.addEventListener('init', e => {
+    const d = JSON.parse(e.data);
+    S.devices   = d.devices || {};
+    S.transfers = d.transfers || {};
+    S.stats     = d.stats || S.stats;
+    document.getElementById('my-hostname').textContent = d.hostname || '—';
+    document.getElementById('my-ip').textContent = d.my_ip || '—';
+    if (!S.currentPath) S.currentPath = null;
+    renderDevices();
+    renderTransfers();
+    updateStats();
+    setConn(true);
+  });
+
+  sse.addEventListener('device_joined', e => {
+    const d = JSON.parse(e.data);
+    S.devices[d.ip] = d;
+    renderDevices();
+    addLog(`New device: ${d.hostname} (${d.ip})`, 'join');
+  });
+
+  sse.addEventListener('device_updated', e => {
+    const d = JSON.parse(e.data);
+    S.devices[d.ip] = d;
+    renderDevices();
+  });
+
+  sse.addEventListener('device_left', e => {
+    const d = JSON.parse(e.data);
+    if (S.devices[d.ip]) S.devices[d.ip].status = 'offline';
+    renderDevices();
+    addLog(`Device offline: ${d.hostname} (${d.ip})`, 'leave');
+  });
+
+  sse.addEventListener('transfer_start', e => {
+    const d = JSON.parse(e.data);
+    S.transfers[d.id] = d;
+    renderTransfers();
+    addLog(`${d.direction==='send'?'Sending':'Receiving'}: ${d.file}`, 'transfer');
+  });
+
+  sse.addEventListener('transfer_progress', e => {
+    const d = JSON.parse(e.data);
+    if (S.transfers[d.id]) {
+      S.transfers[d.id].done = d.done;
+      S.transfers[d.id].total = d.total;
+    }
+    updateProgress(d.id, d.pct);
+  });
+
+  sse.addEventListener('transfer_done', e => {
+    const d = JSON.parse(e.data);
+    if (S.transfers[d.id]) {
+      S.transfers[d.id].status = d.ok ? 'done' : 'error';
+    }
+    renderTransfers();
+    addLog(d.ok ? `Transfer complete: ${S.transfers[d.id]?.file||d.id}` : `Transfer failed: ${d.error||d.id}`, d.ok?'transfer':'error');
+    fetch('/api/state').then(r=>r.json()).then(st=>{S.stats=st.stats;updateStats();});
+  });
+
+  sse.addEventListener('ping', () => {});
+
+  sse.onerror = () => {
+    setConn(false);
+    sse.close();
+    sse = null;
+    reconnectTimer = setTimeout(connectSSE, 3000);
+  };
+}
+
+function setConn(ok) {
+  document.getElementById('conn-dot').className = ok ? '' : 'disconnected';
+  document.getElementById('conn-label').textContent = ok ? 'Live' : 'Reconnecting…';
+}
+
+// ── Render Devices ────────────────────────────────────
+function renderDevices() {
+  const list = document.getElementById('devices-list');
+  const devs = Object.values(S.devices).sort((a,b)=>{
+    if(a.is_self) return -1; if(b.is_self) return 1;
+    return a.hostname.localeCompare(b.hostname);
+  });
+  document.getElementById('device-count').textContent = devs.length;
+
+  list.innerHTML = devs.map(d => {
+    const active = S.currentDevice === d.ip ? 'active' : '';
+    const selfCls = d.is_self ? 'self-device' : '';
+    const status = d.is_self ? 'self' : d.status;
+    const icon = d.is_self ? '💻' : (d.status==='online' ? '🖥️' : '💤');
+    const iconCls = d.status==='online' ? 'online' : '';
+    return `<div class="device-card ${active} ${selfCls}" onclick="selectDevice('${d.ip}')">
+      <div class="device-icon ${iconCls}">${icon}</div>
+      <div class="device-info">
+        <div class="device-name">${d.hostname}</div>
+        <div class="device-ip">${d.ip}:${d.port||8765}</div>
+      </div>
+      <div class="device-status ${status}">${status}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectDevice(ip) {
+  S.currentDevice = ip;
+  const dev = S.devices[ip];
+  S.selectedFiles.clear();
+  document.getElementById('send-btn').style.display='none';
+
+  if (!dev) return;
+
+  if (dev.is_self) {
+    clearRemote();
+  } else {
+    // Remote browse
+    document.getElementById('target-banner').classList.remove('hidden');
+    document.getElementById('target-label').textContent = `Browsing ${dev.hostname} (${dev.ip})`;
+    browseRemote(ip, dev.port, null);
+  }
+  renderDevices();
+}
+
+function clearRemote() {
+  S.currentDevice = null;
+  document.getElementById('target-banner').classList.add('hidden');
+  S.selectedFiles.clear();
+  // Find self IP and set it
+  const self = Object.values(S.devices).find(d=>d.is_self);
+  if (self) S.currentDevice = self.ip;
+  browseLocal(null);
+  renderDevices();
+}
+
+// ── File Explorer ────────────────────────────────────
+function browseLocal(path) {
+  const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse';
+  fetch(url).then(r=>r.json()).then(renderFiles);
+}
+
+function browseRemote(ip, port, path) {
+  const dev = S.devices[ip];
+  if (!dev) return;
+  const pParam = path ? `&path=${encodeURIComponent(path)}` : '';
+  fetch(`/api/remote/browse?ip=${ip}&port=${dev.port}${pParam}`)
+    .then(r=>r.json()).then(renderFiles);
+}
+
+function browse(path) {
+  const dev = S.currentDevice ? S.devices[S.currentDevice] : null;
+  if (!dev || dev.is_self) {
+    browseLocal(path);
+  } else {
+    browseRemote(dev.ip, dev.port, path);
+  }
+}
+
+function renderFiles(data) {
+  S.selectedFiles.clear();
+  document.getElementById('send-btn').style.display='none';
+
+  if (data.error) {
+    document.getElementById('file-grid').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${data.error}</div></div>`;
+    return;
+  }
+
+  S.currentPath = data.path;
+  renderCrumbs(data.path, data.parent);
+
+  if (!data.entries || !data.entries.length) {
+    document.getElementById('file-grid').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-text">Empty folder</div></div>`;
+    return;
+  }
+
+  const isRemote = S.currentDevice && !S.devices[S.currentDevice]?.is_self;
+
+  const rows = data.entries.map(f => {
+    const icon = f.is_dir ? '📁' : fileIcon(f.mime, f.name);
+    const mod  = f.modified ? f.modified.slice(0,16).replace('T',' ') : '';
+    const dlBtn = !f.is_dir && !isRemote
+      ? `<div class="icon-btn" title="Download" onclick="event.stopPropagation();downloadFile('${esc(f.path)}','${esc(f.name)}')">⬇</div>` : '';
+    const sendBtn = !f.is_dir && isRemote
+      ? `<div class="icon-btn" title="Download to local" onclick="event.stopPropagation();remoteDownload('${esc(f.path)}','${esc(f.name)}')">⬇</div>` : '';
+    const delBtn = !isRemote
+      ? `<div class="icon-btn red" title="Delete" onclick="event.stopPropagation();deleteFile('${esc(f.path)}')">🗑</div>` : '';
+    return `<div class="file-row" data-path="${esc(f.path)}" data-isdir="${f.is_dir}" onclick="fileClick(event,'${esc(f.path)}',${f.is_dir})">
+      <div class="file-icon">${icon}</div>
+      <div class="file-name">${f.name}</div>
+      <div class="file-size">${f.size_human}</div>
+      <div class="file-date">${mod}</div>
+      <div class="file-actions">${dlBtn}${sendBtn}${delBtn}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('file-grid').innerHTML = rows;
+}
+
+function fileClick(e, path, isDir) {
+  if (isDir) { browse(path); return; }
+  const row = e.currentTarget;
+  if (S.selectedFiles.has(path)) {
+    S.selectedFiles.delete(path);
+    row.classList.remove('selected');
+  } else {
+    S.selectedFiles.add(path);
+    row.classList.add('selected');
+  }
+  document.getElementById('send-btn').style.display = S.selectedFiles.size > 0 ? '' : 'none';
+}
+
+function renderCrumbs(path, parent) {
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  let built = '';
+  const isWin = path.includes('\\');
+  const sep = isWin ? '\\' : '/';
+
+  const crumbs = parts.map((p, i) => {
+    built += (i===0 && !isWin ? '/' : '') + p + sep;
+    const cp = built;
+    return `<span class="path-crumb" onclick="browse('${esc(cp)}')">${p}</span>`;
+  });
+
+  const root = `<span class="path-crumb" onclick="browse('${isWin ? parts[0]+sep : '/'}')">⌂</span>`;
+  document.getElementById('path-bar').innerHTML = root +
+    crumbs.map((c,i) => `<span class="path-sep">${sep}</span>${c}`).join('');
+}
+
+function navUp() {
+  if (!S.currentPath) return;
+  const isWin = S.currentPath.includes('\\');
+  const sep = isWin ? '\\' : '/';
+  const parts = S.currentPath.split(sep).filter(Boolean);
+  if (parts.length <= 1) { browse(isWin ? parts[0]+sep : '/'); return; }
+  parts.pop();
+  browse((isWin ? '' : '/') + parts.join(sep));
+}
+
+function refreshDir() { if (S.currentPath) browse(S.currentPath); }
+
+function fileIcon(mime, name) {
+  if (!mime) return '📄';
+  if (mime.startsWith('image/')) return '🖼';
+  if (mime.startsWith('video/')) return '🎬';
+  if (mime.startsWith('audio/')) return '🎵';
+  if (mime.includes('pdf'))      return '📕';
+  if (mime.includes('zip') || mime.includes('tar') || name.match(/\.(gz|7z|rar)$/)) return '📦';
+  if (mime.includes('text') || name.match(/\.(md|txt|log|json|yaml|yml|sh|py|js|ts|html|css)$/)) return '📝';
+  if (name.match(/\.(exe|dmg|pkg|deb|rpm|msi)$/)) return '⚙️';
+  return '📄';
+}
+
+function downloadFile(path, name) {
+  const a = document.createElement('a');
+  a.href = `/api/download?path=${encodeURIComponent(path)}`;
+  a.download = name;
+  a.click();
+}
+
+function remoteDownload(remotePath, filename) {
+  const dev = S.currentDevice ? S.devices[S.currentDevice] : null;
+  if (!dev) return;
+  // Use the remote's download endpoint proxied through our server
+  const url = `http://${dev.ip}:${dev.port}/api/download?path=${encodeURIComponent(remotePath)}`;
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.target = '_blank';
+  a.click();
+  addLog(`Downloading ${filename} from ${dev.hostname}`, 'transfer');
+}
+
+function deleteFile(path) {
+  if (!confirm(`Delete ${path.split(/[/\\]/).pop()}?`)) return;
+  fetch('/api/delete', {method:'POST', body:JSON.stringify({path})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok) { refreshDir(); addLog(`Deleted: ${path}`, 'leave'); }
+      else alert('Error: ' + d.error);
+    });
+}
+
+// ── Send modal ───────────────────────────────────────
+function openSendModal() {
+  if (!S.selectedFiles.size) return;
+  const targets = Object.values(S.devices).filter(d => !d.is_self && d.status==='online');
+  if (!targets.length) { alert('No online remote devices found.'); return; }
+
+  openModal('Send Files', `
+    <div class="modal-row">
+      <div class="modal-label">Files (${S.selectedFiles.size})</div>
+      <div style="font-size:11px;color:var(--text2);max-height:80px;overflow-y:auto">
+        ${[...S.selectedFiles].map(p=>`<div>${p.split(/[/\\]/).pop()}</div>`).join('')}
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">Target Device</div>
+      <select class="modal-input" id="send-target">
+        ${targets.map(d=>`<option value="${d.ip}|${d.port}">${d.hostname} (${d.ip})</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">Destination folder on target</div>
+      <input class="modal-input" id="send-dst" value="~/Downloads" placeholder="~/Downloads"/>
+    </div>
+  `, async () => {
+    const [ip, port] = document.getElementById('send-target').value.split('|');
+    const dst = document.getElementById('send-dst').value.replace('~', '');
+    for (const path of S.selectedFiles) {
+      await fetch('/api/send', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({src_path: path, target_ip: ip, target_port: parseInt(port), dst_dir: dst})});
+    }
+    S.selectedFiles.clear();
+    document.querySelectorAll('.file-row.selected').forEach(r=>r.classList.remove('selected'));
+    document.getElementById('send-btn').style.display='none';
+    closeModal();
+  });
+}
+
+function openMkdir() {
+  openModal('New Folder', `
+    <div class="modal-row">
+      <div class="modal-label">Folder name</div>
+      <input class="modal-input" id="mkdir-name" placeholder="new-folder" autofocus/>
+    </div>
+  `, () => {
+    const name = document.getElementById('mkdir-name').value.trim();
+    if (!name) return;
+    const newPath = (S.currentPath + '/' + name).replace(/\/+/,'/');
+    fetch('/api/mkdir', {method:'POST', body:JSON.stringify({path:newPath})})
+      .then(r=>r.json()).then(d=>{
+        if(d.ok) { refreshDir(); closeModal(); }
+        else alert('Error: '+d.error);
+      });
+  });
+}
+
+// ── Modal helpers ────────────────────────────────────
+let _modalCb = null;
+function openModal(title, bodyHtml, onOk) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  _modalCb = onOk;
+  document.getElementById('modal-bg').classList.add('open');
+  const first = document.querySelector('#modal input, #modal select');
+  if (first) first.focus();
+}
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); _modalCb=null; }
+document.getElementById('modal-ok').onclick = () => { if(_modalCb) _modalCb(); };
+document.getElementById('modal-bg').onclick = e => { if(e.target===document.getElementById('modal-bg')) closeModal(); };
+
+// ── Transfers ─────────────────────────────────────────
+function renderTransfers() {
+  const list = document.getElementById('transfers-list');
+  const items = Object.values(S.transfers).sort((a,b)=>b.started?.localeCompare(a.started||'')||0);
+  document.getElementById('tx-count').textContent = items.length;
+
+  list.innerHTML = items.slice(0,20).map(t => {
+    const pct = t.total ? Math.round((t.done||0)/t.total*100) : (t.status==='done'?100:0);
+    return `<div class="transfer-card ${t.status}" id="tx-${t.id}">
+      <div class="tx-row">
+        <div class="tx-file">${t.file}</div>
+        <div class="tx-dir ${t.direction}">${t.direction==='send'?'↑ send':'↓ recv'}</div>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${t.status}" id="pf-${t.id}" style="width:${pct}%"></div></div>
+      <div class="tx-meta">
+        <span id="ts-${t.id}" class="tx-status">${t.status}</span>
+        <span>${pct}%</span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;font-size:11px;color:var(--text3)">No transfers yet</div>';
+}
+
+function updateProgress(id, pct) {
+  const pf = document.getElementById('pf-'+id);
+  const ts = document.getElementById('ts-'+id);
+  if (pf) pf.style.width = pct + '%';
+  if (ts) ts.textContent = pct + '%';
+}
+
+// ── Log ───────────────────────────────────────────────
+function addLog(msg, cls='') {
+  const list = document.getElementById('log-list');
+  const ts   = new Date().toTimeString().slice(0,8);
+  const div  = document.createElement('div');
+  div.className = `log-entry ${cls}`;
+  div.innerHTML = `<span class="ts">${ts}</span>${msg}`;
+  list.prepend(div);
+  while (list.children.length > 100) list.removeChild(list.lastChild);
+}
+function clearLog() { document.getElementById('log-list').innerHTML=''; }
+
+// ── Stats ─────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('stat-sent').textContent = humanSize(S.stats.sent_bytes||0);
+  document.getElementById('stat-recv').textContent = humanSize(S.stats.recv_bytes||0);
+}
+function humanSize(n) {
+  const u = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
+  return n.toFixed(1)+' '+u[i];
+}
+
+// ── Utility ───────────────────────────────────────────
+function esc(s) { return String(s).replace(/'/g,"\\'").replace(/\\/g,'\\\\'); }
+
+// ── Scan status ───────────────────────────────────────
+let scanCount = 0;
+setInterval(() => {
+  const online = Object.values(S.devices).filter(d=>d.status==='online').length;
+  document.getElementById('scan-label').textContent = `${online} device${online!==1?'s':''} online`;
+  scanCount++;
+}, 2000);
+
+// ── Init ──────────────────────────────────────────────
+connectSSE();
+// Start browsing local files after a short delay
+setTimeout(() => {
+  const self = Object.values(S.devices).find(d=>d.is_self);
+  if (self) { S.currentDevice=self.ip; }
+  browseLocal(null);
+  addLog('LAN Share started', 'join');
+}, 800);
+</script>
+</body>
+</html>

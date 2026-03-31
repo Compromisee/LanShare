@@ -1,0 +1,23 @@
+{
+  "devices": {
+    "192.168.68.65": {
+      "ip": "192.168.68.65",
+      "hostname": "Soliperdoicity",
+      "port": 8765,
+      "last_seen": "2026-03-30T21:11:49.373286",
+      "status": "online",
+      "is_self": true,
+      "version": "1.0"
+    }
+  },
+  "my_ip": "192.168.68.65",
+  "hostname": "Soliperdoicity",
+  "started": "2026-03-30T21:09:31.039788",
+  "stats": {
+    "sent_bytes": 0,
+    "recv_bytes": 0,
+    "files_sent": 0,
+    "files_recv": 0
+  },
+  "transfers": {}
+}
